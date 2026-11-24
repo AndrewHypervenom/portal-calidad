@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#edf2f0" />
+    <meta name="description" content="Portal de Calidad Positivo S+ · Prevención de Fraudes Bradescard: cédulas, resultados, planes de acción y actas." />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Portal de Calidad · Positivo S+</title>
+    <script>
+      try {
+        var p = JSON.parse(localStorage.getItem('portal-calidad:prefs') || '{}');
+        var t = p.tema || 'sistema';
+        var oscuro = t === 'oscuro' || (t === 'sistema' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = oscuro ? 'dark' : 'light';
+        document.documentElement.style.colorScheme = oscuro ? 'dark' : 'light';
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

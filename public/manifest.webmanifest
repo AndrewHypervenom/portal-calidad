@@ -1,0 +1,15 @@
+{
+  "name": "Portal de Calidad · Positivo S+",
+  "short_name": "Calidad S+",
+  "description": "Cédulas, alertas, planes de acción, firmas y KPIs del equipo de calidad de Prevención de Fraudes.",
+  "lang": "es-MX",
+  "start_url": "./#/inicio",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "favicon.png", "sizes": "64x64", "type": "image/png" },
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

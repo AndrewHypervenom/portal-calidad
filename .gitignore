@@ -1,0 +1,47 @@
+# Dependencias y build
+node_modules/
+dist/
+datos/
+
+# Variables de entorno
+.env
+.env.*
+*.log
+
+# Archivos del sistema
+Thumbs.db
+.DS_Store
+~$*
+
+# Imágenes
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+/*.bmp
+/*.webp
+/*.svg
+/*.ico
+/*.tif
+/*.tiff
+/*.heic
+
+# PDF
+/*.pdf
+
+# Excel
+/*.xls
+/*.xlsx
+/*.xlsm
+/*.xlsb
+/*.csv
+
+# Word
+/*.doc
+/*.docx
+/*.docm
+/*.dotx
+/*.rtf
+
+# Texto
+/*.txt
