@@ -6,7 +6,8 @@ import { normalizar, pct } from '../lib/format'
 import { fechaMedia } from '../lib/dates'
 import { setPrefs, temaEfectivo } from '../lib/prefs'
 import { cedulaPorId } from '../lib/catalog'
-import { PAGINAS } from './navegacion'
+import { paginasPara } from './navegacion' 
+import { useSesion } from '../lib/sesion' 
 import { Avatar, Tecla, cx } from './ui'
 
 interface Resultado {
@@ -20,6 +21,7 @@ interface Resultado {
 
 export function Comandos({ abierto, onCerrar }: { abierto: boolean; onCerrar: () => void }) {
   const db = useDb()
+  const { perfil } = useSesion() 
   const [q, setQ] = useState('')
   const [i, setI] = useState(0)
   const lista = useRef<HTMLDivElement>(null)
@@ -33,14 +35,16 @@ export function Comandos({ abierto, onCerrar }: { abierto: boolean; onCerrar: ()
 
   const resultados = useMemo<Resultado[]>(() => {
     const n = normalizar(q)
-    const paginas = PAGINAS.filter((p) => !n || normalizar(`${p.titulo} ${p.palabras ?? ''}`).includes(n)).map((p) => ({
-      id: `p-${p.id}`,
-      grupo: 'Ir a',
-      titulo: p.titulo,
-      detalle: p.descripcion,
-      icono: <p.icono className="size-4" />,
-      accion: () => ir(p.id),
-    }))
+    const paginas = paginasPara(perfil?.rol)
+      .filter((p) => !n || normalizar(`${p.titulo} ${p.palabras ?? ''}`).includes(n))
+      .map((p) => ({
+        id: `p-${p.id}`,
+        grupo: 'Ir a',
+        titulo: p.titulo,
+        detalle: p.descripcion,
+        icono: <p.icono className="size-4" />,
+        accion: () => ir(p.id),
+      }))
     const acciones: Resultado[] = [
       { id: 'a-inb', grupo: 'Acciones', titulo: 'Nueva evaluación Inbound', icono: <FileText className="size-4" />, accion: () => ir('evaluar', { params: { canal: 'Inbound' } }) },
       { id: 'a-mon', grupo: 'Acciones', titulo: 'Nueva evaluación Monitoreo', icono: <FileText className="size-4" />, accion: () => ir('evaluar', { params: { canal: 'Monitoreo' } }) },
@@ -77,8 +81,7 @@ export function Comandos({ abierto, onCerrar }: { abierto: boolean; onCerrar: ()
         accion: () => abrirPanel('ev', e.id),
       }))
     return [...agentes, ...evals, ...paginas, ...acciones]
-  }, [q, db])
-
+  }, [q, db, perfil?.rol]) 
   useEffect(() => {
     lista.current?.querySelector(`[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [i])

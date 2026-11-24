@@ -3,6 +3,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { aplicar, crearDbDesdeSeed, migrarDb } from '../src/shared/reducer.js'
+import { OPS_SOLO_ADMIN, tokenDe, verificar } from './auth.mjs'
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const MAX_CUERPO = 60 * 1024 * 1024
@@ -105,6 +106,10 @@ export function crearApi(opciones = {}) {
     const url = new URL(req.url || '/', 'http://localhost')
     if (!url.pathname.startsWith('/api/')) return next ? next() : json(res, 404, { error: 'No encontrado' })
     try {
+      // Toda la API exige una sesión válida
+      const usuario = await verificar(tokenDe(req, url))
+      if (!usuario) return json(res, 401, { error: 'Sesión no válida o vencida. Vuelve a iniciar sesión.' })
+
       if (req.method === 'GET' && url.pathname === '/api/salud') {
         return json(res, 200, { ok: true, rev: db.rev, evaluaciones: db.evaluaciones.length })
       }
@@ -128,16 +133,20 @@ export function crearApi(opciones = {}) {
         return
       }
       if (req.method === 'GET' && url.pathname === '/api/respaldo') {
+        if (usuario.rol !== 'admin') return json(res, 403, { error: 'Solo el administrador puede descargar respaldos.' })
         const nombre = `portal-calidad-${hoyLocal()}.json`
         return json(res, 200, db, { 'Content-Disposition': `attachment; filename="${nombre}"` })
       }
       if (req.method === 'POST' && url.pathname === '/api/op') {
         const cuerpo = JSON.parse(await leerCuerpo(req))
+        if (OPS_SOLO_ADMIN.has(cuerpo.op) && usuario.rol !== 'admin') {
+          return json(res, 403, { error: 'Tu rol no tiene permiso para esta acción.' })
+        }
         let env = {
           opId: cuerpo.opId || randomUUID(),
           op: cuerpo.op,
           payload: cuerpo.payload,
-          por: String(cuerpo.por || '').slice(0, 120),
+          por: usuario.nombre, // el nombre sale del token, no del navegador
           now: new Date().toISOString(),
         }
         if (env.op === 'datos.reiniciar') env = { ...env, op: 'datos.restaurar', payload: { db: crearDbDesdeSeed(leerSeed()) } }

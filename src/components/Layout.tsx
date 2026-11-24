@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Bell, CalendarDays, Check, ChevronDown, Laptop, Moon, MoreHorizontal, Plus, Search, Sun } from 'lucide-react'
+import { Bell, CalendarDays, Check, ChevronDown, Laptop, LogOut, Moon, MoreHorizontal, Plus, Search, Sun } from 'lucide-react'
 import { useRuta, ir, enlace, abrirPanel } from '../lib/router'
 import { useStore } from '../lib/store'
 import { setPrefs, temaEfectivo, usePrefs, type Tema } from '../lib/prefs'
@@ -8,7 +8,9 @@ import { claveTexto, mesesConDatos, type FiltroCanal, type Periodo } from '../li
 import { claveMes, hoyIso, nombreMesCapital } from '../lib/dates'
 import { num } from '../lib/format'
 import { planAbierto } from '../lib/plans'
-import { PAGINAS } from './navegacion'
+import { PAGINAS, paginasPara } from './navegacion'
+import { cerrarSesion, useSesion } from '../lib/sesion'
+import { NOMBRE_ROL } from '../lib/supabase'
 import { Popover, OpcionMenu, TituloMenu } from './Popover'
 import { Avatar, Boton, Entrada, Segmentado, Tecla, cx } from './ui'
 
@@ -40,6 +42,7 @@ function useConteoPlanes() {
 
 function BarraLateral() {
   const ruta = useRuta()
+  const { perfil } = useSesion()
   const { abiertos, vencidos } = useConteoPlanes()
   return (
     <aside className="zona-marca fixed inset-y-0 left-0 z-30 hidden w-[72px] flex-col border-r border-line md:flex xl:w-[248px] no-imprimir">
@@ -56,7 +59,7 @@ function BarraLateral() {
       <div className="linea-marca mx-5 hidden h-[2px] rounded-full xl:block" aria-hidden />
       <p className="hidden px-5 pt-2.5 pb-3 text-[11.5px] font-medium tracking-[0.01em] text-ink-2 xl:block">Calidad · Prevención de Fraudes</p>
       <nav className="mt-2 flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 xl:mt-0" aria-label="Secciones">
-        {PAGINAS.map((p) => {
+         {paginasPara(perfil?.rol).map((p) => {
           const activo = ruta.pagina === p.id
           const badge = p.id === 'seguimiento' ? (vencidos ? { n: vencidos, rojo: true } : abiertos ? { n: abiertos, rojo: false } : null) : null
           return (
@@ -95,9 +98,9 @@ function BarraLateral() {
 }
 
 function PieLateral() {
-  const { db, conexion, modo } = useStore()
+  const { conexion, modo } = useStore()
+  const { perfil } = useSesion()
   const prefs = usePrefs()
-  const analista = db?.analistas.find((a) => a.id === prefs.analistaId)
   const estado =
     modo === 'local'
       ? { color: 'bg-ink-3', texto: 'Modo local · solo este navegador' }
@@ -106,60 +109,22 @@ function PieLateral() {
         : { color: 'bg-warn', texto: 'Reconectando…' }
   return (
     <div className="flex flex-col gap-2 border-t border-line p-3">
-      <Popover
-        alinear="inicio"
-        ancho={270}
-        className="w-full"
-        disparador={(abierto, alternar) => (
-          <button
-            onClick={alternar}
-            aria-expanded={abierto}
-            className={cx('flex w-full items-center justify-center gap-2.5 rounded-[10px] p-1.5 text-left transition-colors hover:bg-hover xl:justify-start', abierto && 'bg-hover')}
-            title="Analista que usa este equipo"
-          >
-            {analista ? (
-              <Avatar nombre={analista.nombre} tam={32} />
-            ) : (
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-fill text-[13px] font-semibold text-ink-2">?</span>
-            )}
-            <span className="hidden min-w-0 flex-1 xl:block">
-              <span className="block truncate text-[13px] font-semibold">{analista?.corto ?? (prefs.analistaId === 'consulta' ? 'Solo consulta' : 'Elige tu nombre')}</span>
-              <span className="block truncate text-[11.5px] text-ink-2">{analista ? 'Analista de calidad' : 'Toca para elegir tu nombre'}</span>
-            </span>
-            <ChevronDown className={cx('hidden size-4 shrink-0 text-ink-3 transition-transform xl:block', abierto && 'rotate-180')} />
-          </button>
-        )}
-      >
-        {(cerrar) => (
-          <>
-            <TituloMenu>¿Quién usa este equipo?</TituloMenu>
-            {db?.analistas
-              .filter((a) => a.activo)
-              .map((a) => (
-                <OpcionMenu
-                  key={a.id}
-                  activo={a.id === prefs.analistaId}
-                  onClick={() => {
-                    setPrefs({ analistaId: a.id })
-                    cerrar()
-                  }}
-                >
-                  {a.nombre}
-                </OpcionMenu>
-              ))}
-            <div className="my-1 h-px bg-line" />
-            <OpcionMenu
-              activo={prefs.analistaId === 'consulta'}
-              onClick={() => {
-                setPrefs({ analistaId: 'consulta' })
-                cerrar()
-              }}
-            >
-              Solo consulta
-            </OpcionMenu>
-          </>
-        )}
-      </Popover>
+      {/* Usuario que inició sesión + cerrar sesión */}
+      <div className="flex flex-col items-center gap-2 rounded-[10px] p-1.5 xl:flex-row xl:gap-2.5">
+        <Avatar nombre={perfil?.nombre ?? '?'} tam={32} />
+        <span className="hidden min-w-0 flex-1 xl:block">
+          <span className="block truncate text-[13px] font-semibold">{perfil?.nombre}</span>
+          <span className="block truncate text-[11.5px] text-ink-2">{perfil ? NOMBRE_ROL[perfil.rol] : ''}</span>
+        </span>
+        <button
+          onClick={() => void cerrarSesion()}
+          title="Cerrar sesión"
+          aria-label="Cerrar sesión"
+          className="inline-flex rounded-lg p-1.5 text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+        >
+          <LogOut className="size-4" />
+        </button>
+      </div>
       <div className="hidden xl:block">
         <Segmentado<Tema>
           completo
@@ -367,8 +332,10 @@ function BarraSuperior({ onBuscar }: { onBuscar: () => void }) {
 
 function BarraInferior() {
   const ruta = useRuta()
-  const principales = PAGINAS.filter((p) => p.movil)
-  const resto = PAGINAS.filter((p) => !p.movil)
+  const { perfil } = useSesion()
+  const visibles = paginasPara(perfil?.rol)
+  const principales = visibles.filter((p) => p.movil)
+  const resto = visibles.filter((p) => !p.movil)
   return (
     <nav className="material fixed inset-x-0 bottom-0 z-30 flex border-t border-line pb-[env(safe-area-inset-bottom)] md:hidden no-imprimir" aria-label="Secciones">
       {principales.map((p) => {

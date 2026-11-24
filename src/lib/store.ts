@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { aplicar, crearDbDesdeSeed, migrarDb } from '../shared/reducer.js'
 import type { DB, OpName } from './types'
 import { uid } from './format'
+import { cerrarSesion, tokenSesion } from './sesion'
 
 export type Modo = 'servidor' | 'local'
 export type Conexion = 'conectando' | 'en-linea' | 'reconectando' | 'local'
@@ -24,6 +25,11 @@ interface MensajeOp {
 
 const IDB_NOMBRE = 'portal-calidad'
 const IDB_CLAVE = 'db'
+
+
+function conToken(init: RequestInit = {}): RequestInit {
+  return { ...init, headers: { ...((init.headers as Record<string, string>) ?? {}), Authorization: `Bearer ${tokenSesion()}` } }
+}
 
 function idb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -90,7 +96,12 @@ class Store {
 
   async iniciar() {
     try {
-      const r = await fetch('/api/estado', { cache: 'no-store' })
+      const r = await fetch('/api/estado', conToken({ cache: 'no-store' }))
+      
+      if (r.status === 401) {
+        await cerrarSesion()
+        return
+      }
       if (!r.ok || !(r.headers.get('content-type') ?? '').includes('json')) throw new Error('sin api')
       const db = (await r.json()) as DB
       this.set({ db, modo: 'servidor', conexion: 'en-linea', error: null })
@@ -107,7 +118,7 @@ class Store {
 
   private conectarEventos() {
     this.eventos?.close()
-    const es = new EventSource('/api/eventos')
+    const es = new EventSource(`/api/eventos?token=${encodeURIComponent(tokenSesion())}`)
     this.eventos = es
     let saludo = false
     es.addEventListener('hola', (e) => {
@@ -130,7 +141,7 @@ class Store {
     if (this.sondeo) return
     const revisar = async () => {
       try {
-        const r = await fetch('/api/salud', { cache: 'no-store' })
+        const r = await fetch('/api/salud', conToken({ cache: 'no-store' }))
         if (!r.ok) throw new Error(String(r.status))
         const { rev } = (await r.json()) as { rev: number }
         this.set({ conexion: 'en-linea' })
@@ -167,7 +178,7 @@ class Store {
     if (this.estado.modo !== 'servidor' || this.recargando) return
     this.recargando = true
     try {
-      const r = await fetch('/api/estado', { cache: 'no-store' })
+      const r = await fetch('/api/estado', conToken({ cache: 'no-store' }))
       if (r.ok) this.set({ db: (await r.json()) as DB })
     } finally {
       this.recargando = false
@@ -204,12 +215,16 @@ class Store {
     }
     let resp: Response
     try {
-      resp = await fetch('/api/op', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(env) })
+      resp = await fetch('/api/op', conToken({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(env) }))
     } catch {
       await this.recargar()
       throw new Error('No hay conexión con el servidor; el cambio no se guardó.')
     }
     const cuerpo = await resp.json()
+    if (resp.status === 401) {
+      await cerrarSesion()
+      throw new Error('Tu sesión venció. Vuelve a iniciar sesión.')
+    }
     if (!resp.ok) {
       await this.recargar()
       throw new Error(cuerpo.error || 'No se pudo guardar el cambio')
@@ -230,3 +245,4 @@ export function useDb(): DB {
   if (!db) throw new Error('Base de datos no cargada')
   return db
 }
+
