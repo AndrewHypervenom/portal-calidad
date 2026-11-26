@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, type Perfil } from './supabase'
+import { avisar } from '../components/feedback'
 
 export interface EstadoSesion {
   cargando: boolean
@@ -49,6 +50,7 @@ export async function iniciarSesion(correo: string, clave: string): Promise<bool
     set({ error: 'Correo o contraseña incorrectos.' })
     return false
   }
+  registrarActividad()
   return true
 }
 
@@ -71,3 +73,45 @@ export function useSesion(): EstadoSesion {
 export function tokenSesion(): string {
   return estado.sesion?.access_token ?? ''
 }
+
+
+const INACTIVIDAD_MS = 30 * 60 * 1000
+const AVISO_MS = 2 * 60 * 1000
+
+
+const tiempoTexto = (ms: number) => (ms >= 60_000 ? `${Math.round(ms / 60_000)} minuto${ms >= 120_000 ? 's' : ''}` : `${Math.round(ms / 1000)} segundos`)
+let ultimaActividad = Date.now()
+let avisado = false
+
+function registrarActividad() {
+  ultimaActividad = Date.now()
+  avisado = false
+}
+
+
+for (const evento of ['pointerdown', 'pointermove', 'keydown', 'scroll', 'touchstart'] as const) {
+  window.addEventListener(evento, registrarActividad, { passive: true, capture: true })
+}
+
+function revisarInactividad() {
+  if (!estado.perfil) return
+  const inactivo = Date.now() - ultimaActividad
+  if (inactivo >= INACTIVIDAD_MS) {
+    avisado = false
+    void supabase.auth.signOut().then(() => set({ error: `Tu sesión se cerró después de ${tiempoTexto(INACTIVIDAD_MS)} sin actividad.` }))
+  } else if (inactivo >= INACTIVIDAD_MS - AVISO_MS && !avisado) {
+    avisado = true
+    avisar({
+      tipo: 'info',
+      titulo: 'Tu sesión se cerrará pronto',
+      texto: `Por inactividad, en ${tiempoTexto(AVISO_MS)}. Mueve el mouse o presiona una tecla para seguir conectado.`,
+      duracion: AVISO_MS,
+    })
+  }
+}
+
+
+setInterval(revisarInactividad, 5_000)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') revisarInactividad()
+})

@@ -14,6 +14,7 @@ import { CAMPOS, FIRMANTES, NOMBRE_DOC, camposFaltantes, camposIniciales, estado
 import { Historial } from '../panels/comunes'
 import { Papel } from './Papel'
 import { PadFirma } from './PadFirma'
+import { EnlaceFirma } from './EnlaceFirma'
 import { descargarWord } from './word'
 
 export function EditorDocumento({ id, profundidad, arriba }: { id: string; profundidad: number; arriba: boolean }) {
@@ -212,7 +213,8 @@ export function EditorDocumento({ id, profundidad, arriba }: { id: string; profu
                     {firma ? <CheckCircle2 className="size-5 shrink-0 text-good-ink" /> : <PenLine className="size-5 shrink-0 text-ink-3" />}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13px] font-medium">{f.etiqueta}</p>
-                      <p className="truncate text-[12px] text-ink-2">{firma ? `${firma.nombre} · ${fechaHora(firma.fecha)}` : campos[f.campoNombre] || 'Sin nombre'}</p>
+                      <p className="truncate text-[12px] text-ink-2">{firma ? `${firma.nombre} · ${fechaHora(firma.fecha)}${firma.via === 'enlace' ? ' · por enlace' : ''}${firma.metodo === 'imagen' ? ' (imagen subida)' : ''}` : campos[f.campoNombre] || 'Sin nombre'}</p>
+                      {firma?.comentario && <p className="mt-0.5 text-[12px] text-warn-ink">Comentario: {firma.comentario}</p>}
                     </div>
                     {firma ? (
                       !doc.anulado &&
@@ -232,6 +234,8 @@ export function EditorDocumento({ id, profundidad, arriba }: { id: string; profu
             </div>
             {doc.tipo === 'retro' && <p className="mt-1.5 text-[11.5px] text-ink-3">Al firmar el colaborador se registra el feedback y la acción del plan (niveles 1 y 2).</p>}
           </section>
+
+          <EnlaceFirma doc={doc} bloqueadoPorCampos={faltan.length > 0} />
 
           {doc.tipo === 'retro' && desconocia && plan && plan.seguimiento?.causa !== 'SABER' && (
             <button onClick={() => void store.op('seguimiento.actualizar', { evaluacionId: plan.id, causa: 'SABER' })} className="rounded-[14px] bg-accent-soft px-4 py-3 text-left text-[12.5px] font-medium text-accent-ink">

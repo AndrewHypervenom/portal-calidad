@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { aplicar, crearDbDesdeSeed, migrarDb } from '../src/shared/reducer.js'
 import { OPS_SOLO_ADMIN, tokenDe, verificar } from './auth.mjs'
+import { FIRMANTE_AGENTE, crearFirmas } from './firmas.mjs'
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const MAX_CUERPO = 60 * 1024 * 1024
@@ -59,6 +60,7 @@ export function crearApi(opciones = {}) {
     db = crearDbDesdeSeed(leerSeed())
     escribirAtomico(archivo, JSON.stringify(db))
   }
+  const firmas = crearFirmas(dirDatos)
   let ultimoRespaldo = ''
   const clientes = new Set()
   if (migrada) guardar()
@@ -102,11 +104,67 @@ export function crearApi(opciones = {}) {
     })
   }
 
+ 
+  function ejecutar(env) {
+    const r = aplicar(db, env, { autoritativo: true })
+    db = r.db
+    db.rev = (db.rev || 0) + 1
+    guardar()
+    const mensaje = { rev: db.rev, opId: env.opId, op: env.op, payload: r.payload, por: env.por, now: env.now }
+    difundir(mensaje)
+    return mensaje
+  }
+
   return async function api(req, res, next) {
     const url = new URL(req.url || '/', 'http://localhost')
     if (!url.pathname.startsWith('/api/')) return next ? next() : json(res, 404, { error: 'No encontrado' })
     try {
-      // Toda la API exige una sesión válida
+ 
+      const mPublica = /^\/api\/firma-publica\/([A-Za-z0-9_-]{20,})$/.exec(url.pathname)
+      if (mPublica) {
+        const enlace = firmas.buscar(mPublica[1])
+        const est = enlace ? firmas.estado(enlace) : 'invalido'
+        if (est !== 'activo') {
+          const mensajes = {
+            firmado: 'Este documento ya fue firmado.',
+            vencido: 'Este enlace venció. Pide uno nuevo al área de Calidad.',
+            revocado: 'Este enlace fue anulado. Pide uno nuevo al área de Calidad.',
+            invalido: 'Este enlace no es válido.',
+          }
+          return json(res, 410, { error: mensajes[est], estado: est })
+        }
+        const doc = db.documentos.find((d) => d.id === enlace.documentoId)
+        if (!doc || doc.anulado) return json(res, 410, { error: 'El documento ya no está disponible.', estado: 'invalido' })
+
+        if (req.method === 'GET') return json(res, 200, { doc, firmante: enlace.firmante, venceEn: enlace.venceEn })
+
+        if (req.method === 'POST') {
+          const cuerpo = JSON.parse(await leerCuerpo(req))
+          const nombre = String(cuerpo.nombre || '').trim().slice(0, 120)
+          const img = String(cuerpo.img || '')
+          const comentario = String(cuerpo.comentario || '').trim().slice(0, 1000)
+          const metodo = cuerpo.metodo === 'imagen' ? 'imagen' : 'dibujo'
+          if (!nombre || !img.startsWith('data:image/png;base64,') || img.length > 600_000) {
+            return json(res, 400, { error: 'Escribe tu nombre y dibuja tu firma.' })
+          }
+          if (doc.firmas?.[enlace.firmante]) return json(res, 409, { error: 'Este documento ya tiene tu firma.' })
+          const ahora = new Date().toISOString()
+          const firma = { nombre, img, fecha: ahora, via: 'enlace', metodo, ...(comentario ? { comentario } : {}) }
+          ejecutar({
+            opId: firmas.nuevoId(),
+            op: 'documento.guardar',
+            payload: { ...doc, firmas: { ...(doc.firmas || {}), [enlace.firmante]: firma } },
+            por: `${nombre} (firma por enlace)`,
+            now: ahora,
+          })
+          const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim()
+          firmas.marcarUsado(enlace, { ip, dispositivo: String(req.headers['user-agent'] || '').slice(0, 300) })
+          return json(res, 200, { ok: true })
+        }
+        return json(res, 405, { error: 'Método no permitido' })
+      }
+
+  
       const usuario = await verificar(tokenDe(req, url))
       if (!usuario) return json(res, 401, { error: 'Sesión no válida o vencida. Vuelve a iniciar sesión.' })
 
@@ -132,6 +190,24 @@ export function crearApi(opciones = {}) {
         })
         return
       }
+    
+      if (url.pathname === '/api/firmas/enlaces') {
+        if (req.method === 'GET') return json(res, 200, firmas.listar(url.searchParams.get('documentoId') || ''))
+        if (req.method === 'POST') {
+          const cuerpo = JSON.parse(await leerCuerpo(req))
+          const doc = db.documentos.find((d) => d.id === cuerpo.documentoId)
+          if (!doc || doc.anulado) return json(res, 404, { error: 'El documento no existe o está anulado.' })
+          const firmante = FIRMANTE_AGENTE[doc.tipo]
+          if (doc.firmas?.[firmante]) return json(res, 409, { error: 'El agente ya firmó este documento.' })
+          const correo = String(cuerpo.correo || '').trim().slice(0, 200)
+          return json(res, 200, firmas.crear({ documentoId: doc.id, firmante, correo, por: usuario.nombre }))
+        }
+      }
+      const mRevocar = /^\/api\/firmas\/enlaces\/([\w-]+)$/.exec(url.pathname)
+      if (mRevocar && req.method === 'DELETE') {
+        return firmas.revocar(mRevocar[1]) ? json(res, 200, { ok: true }) : json(res, 404, { error: 'El enlace no existe o ya no está activo.' })
+      }
+
       if (req.method === 'GET' && url.pathname === '/api/respaldo') {
         if (usuario.rol !== 'admin') return json(res, 403, { error: 'Solo el administrador puede descargar respaldos.' })
         const nombre = `portal-calidad-${hoyLocal()}.json`
@@ -146,19 +222,14 @@ export function crearApi(opciones = {}) {
           opId: cuerpo.opId || randomUUID(),
           op: cuerpo.op,
           payload: cuerpo.payload,
-          por: usuario.nombre, // el nombre sale del token, no del navegador
+          por: usuario.nombre, 
           now: new Date().toISOString(),
         }
         if (env.op === 'datos.reiniciar') env = { ...env, op: 'datos.restaurar', payload: { db: crearDbDesdeSeed(leerSeed()) } }
         if (env.op === 'datos.restaurar' && (!env.payload?.db?.evaluaciones || !env.payload?.db?.catalogo)) {
           return json(res, 400, { error: 'El archivo de respaldo no tiene el formato del portal.' })
         }
-        const r = aplicar(db, env, { autoritativo: true })
-        db = r.db
-        db.rev = (db.rev || 0) + 1
-        guardar()
-        const mensaje = { rev: db.rev, opId: env.opId, op: env.op, payload: r.payload, por: env.por, now: env.now }
-        difundir(mensaje)
+        const mensaje = ejecutar(env)
         return json(res, 200, { ok: true, ...mensaje })
       }
       return json(res, 404, { error: 'Ruta de API no encontrada' })

@@ -201,6 +201,9 @@ function Ejecutivos() {
             <Campo etiqueta="Supervisor(a)">
               <Entrada value={edicion.supervisor ?? ''} onChange={(e) => setEdicion({ ...edicion, supervisor: e.target.value })} placeholder={db.config.supervisorOperaciones} />
             </Campo>
+            <Campo etiqueta="Correo" ayuda="Se usa para enviarle los enlaces de firma de sus documentos.">
+              <Entrada type="email" value={edicion.correo ?? ''} onChange={(e) => setEdicion({ ...edicion, correo: e.target.value.trim() || undefined })} placeholder="nombre@positivosmais.com" />
+            </Campo>
             <Campo etiqueta="Fecha de ingreso" ayuda="Durante 60 días entra al segmento de nuevo ingreso del muestreo y al seguimiento de nuevos ingresos.">
               <Entrada type="date" value={edicion.fechaIngreso ?? ''} max={hoyIso()} onChange={(e) => setEdicion({ ...edicion, fechaIngreso: e.target.value })} />
             </Campo>

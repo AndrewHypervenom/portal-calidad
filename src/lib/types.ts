@@ -71,6 +71,7 @@ export interface Agente {
   alias?: string[]
   idProvisional?: boolean
   supervisor?: string
+  correo?: string
   fechaIngreso?: string
   analistaId?: string
   dictamen?: Dictamen
@@ -154,6 +155,9 @@ export interface Firma {
   nombre: string
   img: string
   fecha: string
+  via?: 'enlace'
+  metodo?: 'dibujo' | 'imagen'
+  comentario?: string
 }
 
 export interface Documento {

@@ -7,8 +7,12 @@ if (!url || !llave) {
   throw new Error('Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el archivo .env')
 }
 
+for (const clave of Object.keys(localStorage)) {
+  if (clave.startsWith('sb-') && clave.endsWith('-auth-token')) localStorage.removeItem(clave)
+}
+
 export const supabase = createClient(url, llave, {
-  auth: { persistSession: true, autoRefreshToken: true },
+  auth: { storage: window.sessionStorage, persistSession: true, autoRefreshToken: true },
 })
 
 
